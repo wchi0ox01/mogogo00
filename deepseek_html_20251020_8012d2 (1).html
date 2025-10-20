@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เช็คชื่อ - วิทยาลัยอาชีวศึกษาสระบุรี</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- face-api.js -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <!-- Custom styles -->
+    <style>
+        body { font-family: 'Inter', 'Kanit', sans-serif; }
+        .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .video-container { position: relative; width: 100%; max-width: 640px; margin: 0 auto; }
+        .video-container video { width: 100%; height: auto; border-radius: 0.5rem; }
+        .video-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-4xl">
+        <header class="flex items-center justify-between mb-6">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="clipboard-check" class="text-blue-500 w-6 h-6"></i>
+                <div>
+                    <h1 class="text-xl font-bold">เช็คชื่อมาโรงเรียน</h1>
+                    <p class="text-sm text-gray-400">วิทยาลัยอาชีวศึกษาสระบุรี</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="window.location.href='index.html'" class="text-gray-400 hover:bg-gray-700 rounded-lg text-sm p-2.5" title="กลับไปลงทะเบียน">
+                    <i data-lucide="user-plus" class="w-5 h-5"></i>
+                </button>
+                <button onclick="window.location.href='admin.html'" class="text-gray-400 hover:bg-gray-700 rounded-lg text-sm p-2.5" title="ผู้ดูแลระบบ">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                </button>
+                <button onclick="toggleTheme()" type="button" class="text-gray-400 hover:bg-gray-700 rounded-lg text-sm p-2.5">
+                    <i data-lucide="sun" id="theme-icon-sun" class="hidden w-5 h-5"></i>
+                    <i data-lucide="moon" id="theme-icon-moon" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+
+        <div id="alert" class="p-3 rounded-lg text-sm mb-4 hidden" role="alert"></div>
+
+        <div id="studentInfo" class="bg-blue-700 text-white p-4 rounded-lg mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p><strong>เลขประจำตัว:</strong> <span id="displayId"></span></p>
+                    <p><strong>ชื่อ-นามสกุล:</strong> <span id="displayName"></span></p>
+                    <p><strong>ชั้นปี:</strong> <span id="displayClass"></span></p>
+                </div>
+                <div id="checkInStatus" class="text-right">
+                    <!-- Status will be filled by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Location Check Info -->
+        <div id="location-info" class="bg-gray-700 p-4 rounded-lg mb-6 hidden">
+            <div class="flex items-center gap-2">
+                <i data-lucide="map-pin" class="w-5 h-5 text-green-400"></i>
+                <span id="location-text" class="text-green-400">กำลังตรวจสอบตำแหน่ง...</span>
+            </div>
+        </div>
+
+        <div id="start-scan-section" class="text-center bg-gray-700 p-8 rounded-lg">
+            <h2 class="text-xl font-bold mb-4">เริ่มการเช็คชื่อ</h2>
+            <p class="text-gray-400 mb-6">กดปุ่มด้านล่างเพื่อเริ่มเปิดกล้องและสแกนใบหน้า</p>
+            <button onclick="startScanning()" class="bg-blue-600 text-white px-8 py-3 rounded-full hover:bg-blue-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2">
+                <i data-lucide="camera"></i><span>เริ่มเช็คชื่อ</span>
+            </button>
+        </div>
+
+        <div id="scanning-section" class="hidden space-y-6">
+            <div class="bg-gray-700 p-6 rounded-lg">
+                <h2 class="text-lg font-semibold mb-4 text-gray-300 text-center">กำลังสแกนใบหน้า...</h2>
+                
+                <div id="video-loader" class="flex flex-col items-center justify-center h-64 w-full">
+                    <div class="loader w-12 h-12 rounded-full border-4 border-gray-600 mx-auto"></div>
+                    <p id="video-loading-text" class="mt-4 text-gray-400">กำลังเปิดกล้อง...</p>
+                </div>
+                
+                <div class="video-container hidden" id="video-wrapper">
+                    <video id="video" class="w-full h-full" autoplay muted playsinline></video>
+                    <canvas id="overlay"></canvas>
+                    <div id="scan-success-overlay" class="absolute inset-0 bg-green-900 bg-opacity-70 text-white text-2xl font-bold flex items-center justify-center hidden animate-fade-in">
+                        <span id="scan-success-name"></span>&nbsp;เช็คชื่อสำเร็จ!
+                    </div>
+                </div>
+
+                <div class="mt-4 text-center text-sm text-gray-400">
+                    <p>โปรดมองตรงไปที่กล้องและอยู่ในกรอบที่ปรากฏบนหน้าจอ</p>
+                </div>
+            </div>
+            
+            <div class="text-center">
+                <button onclick="stopScanning()" class="bg-red-600 text-white px-8 py-3 rounded-full hover:bg-red-700 text-lg font-semibold flex items-center justify-center mx-auto gap-2">
+                    <i data-lucide="stop-circle"></i><span>สิ้นสุดการเช็คชื่อ</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-gray-700 p-6 rounded-lg">
+            <h3 class="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                <i data-lucide="history" class="w-5 h-5"></i>
+                ประวัติการเช็คชื่อ
+            </h3>
+            <div id="historyList" class="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                <!-- History items will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        const FIXED_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxjirw7KTSTtRWKntjFXkne8QltcRbL9Pcvt6cAHkgNrWs6Rnqueh4W5yveiogyYhSi/exec';
+        let gasWebAppUrl = localStorage.getItem('gasWebAppUrl') || FIXED_WEB_APP_URL;
+        let studentId = localStorage.getItem('registeredStudentId');
+        let studentName = localStorage.getItem('registeredStudentName');
+        let studentClass = localStorage.getItem('registeredStudentClass');
+        let videoStream = null;
+        let currentGeoLocation = null;
+        let hasCheckedInToday = false;
+        let modelsLoaded = false;
+        let faceDetectionInterval = null;
+        let isScanning = false;
+        let faceMatcher = null;
+        let students = [];
+        let recognitionInProgress = false;
+
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const videoWrapper = document.getElementById('video-wrapper');
+        const videoLoader = document.getElementById('video-loader');
+        const scanSuccessOverlay = document.getElementById('scan-success-overlay');
+        const scanSuccessName = document.getElementById('scan-success-name');
+        const locationInfo = document.getElementById('location-info');
+        const locationText = document.getElementById('location-text');
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            // ตั้งค่า URL โดยอัตโนมัติ
+            gasWebAppUrl = FIXED_WEB_APP_URL;
+            localStorage.setItem('gasWebAppUrl', gasWebAppUrl);
+            
+            if (!studentId) {
+                showAlert('alert', 'กรุณาลงทะเบียนก่อนใช้งาน กำลังนำไปยังหน้าลงทะเบียน...', 'info');
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 2000);
+                return;
+            }
+            
+            // Display student info
+            document.getElementById('displayId').textContent = studentId;
+            document.getElementById('displayName').textContent = studentName;
+            document.getElementById('displayClass').textContent = studentClass;
+            
+            await loadFaceApiModels();
+            modelsLoaded = true;
+            
+            await checkTodayAttendance();
+            await loadAttendanceHistory();
+            await loadStudentDataForRecognition();
+            toggleTheme(true);
+            
+            // ตรวจสอบตำแหน่ง
+            checkLocationOnLoad();
+        });
+
+        async function checkLocationOnLoad() {
+            const checkLocationEnabled = localStorage.getItem('checkLocation') === 'true';
+            if (checkLocationEnabled) {
+                locationInfo.classList.remove('hidden');
+                await checkLocation();
+            }
+        }
+
+        // ฟังก์ชันตรวจสอบตำแหน่ง
+        async function checkLocation() {
+            const checkLocationEnabled = localStorage.getItem('checkLocation') === 'true';
+            
+            if (!checkLocationEnabled) {
+                locationText.textContent = '✓ การตรวจสอบตำแหน่งถูกปิดใช้งาน';
+                locationText.className = 'text-green-400';
+                return {
+                    withinRange: true,
+                    distance: 0,
+                    location: 'Location check disabled'
+                };
+            }
+
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    locationText.textContent = '✗ เบราว์เซอร์ไม่รองรับการตรวจสอบตำแหน่ง';
+                    locationText.className = 'text-red-400';
+                    reject(new Error('Geolocation is not supported by this browser'));
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        try {
+                            const userLat = position.coords.latitude;
+                            const userLng = position.coords.longitude;
+                            
+                            // พิกัดหน้าเสาธง (จาก admin settings)
+                            const targetLat = parseFloat(localStorage.getItem('checkLat')) || 14.57626;
+                            const targetLng = parseFloat(localStorage.getItem('checkLng')) || 100.87004;
+                            const allowedRadius = parseFloat(localStorage.getItem('checkRadius')) || 50;
+                            
+                            // คำนวณระยะทาง (Haversine formula)
+                            const distance = calculateDistance(userLat, userLng, targetLat, targetLng);
+                            const withinRange = distance <= allowedRadius;
+                            
+                            // อัพเดตข้อมูลตำแหน่งบน UI
+                            if (withinRange) {
+                                locationText.textContent = `✓ อยู่ในรัศมี ${allowedRadius}m จากหน้าเสาธง (ระยะทาง: ${distance.toFixed(1)}m)`;
+                                locationText.className = 'text-green-400';
+                            } else {
+                                locationText.textContent = `✗ อยู่นอกเขตวิทยาลัย (ระยะทาง: ${distance.toFixed(1)}m)`;
+                                locationText.className = 'text-red-400';
+                            }
+                            
+                            resolve({
+                                withinRange: withinRange,
+                                distance: distance,
+                                location: `Lat: ${userLat.toFixed(6)}, Lng: ${userLng.toFixed(6)}`,
+                                userCoords: { lat: userLat, lng: userLng },
+                                targetCoords: { lat: targetLat, lng: targetLng }
+                            });
+                            
+                        } catch (error) {
+                            locationText.textContent = '✗ เกิดข้อผิดพลาดในการตรวจสอบตำแหน่ง';
+                            locationText.className = 'text-red-400';
+                            reject(error);
+                        }
+                    },
+                    (error) => {
+                        let errorMessage = 'ไม่สามารถรับตำแหน่งได้';
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = 'ผู้ใช้ปฏิเสธการเข้าถึงตำแหน่ง';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = 'ข้อมูลตำแหน่งไม่พร้อมใช้งาน';
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = 'การรับตำแหน่งใช้เวลานานเกินไป';
+                                break;
+                        }
+                        locationText.textContent = `⚠️ ${errorMessage}`;
+                        locationText.className = 'text-yellow-400';
+                        reject(new Error(errorMessage));
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            });
+        }
+
+        // ฟังก์ชันคำนวณระยะทาง (เมตร)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // รัศมีโลกในหน่วยเมตร
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            return distance;
+        }
+
+        async function loadFaceApiModels() {
+            videoLoader.querySelector('p').textContent = 'กำลังโหลดโมเดลใบหน้า...';
+            try {
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                videoLoader.querySelector('p').textContent = 'โมเดลใบหน้าโหลดเสร็จสิ้น';
+                console.log('Face models loaded successfully');
+                return true;
+            } catch (error) {
+                console.error('Error loading face models:', error);
+                showAlert('alert', 'ไม่สามารถโหลดโมเดลใบหน้าได้: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        // ... (โค้ดส่วนที่เหลือเหมือนเดิม แต่เพิ่มการตรวจสอบตำแหน่งใน startScanning)
+
+        async function startScanning() {
+            if (hasCheckedInToday) {
+                showAlert('alert', 'คุณได้เช็คชื่อวันนี้แล้ว ไม่สามารถเช็คชื่อซ้ำได้', 'info');
+                return;
+            }
+            
+            if (!modelsLoaded) {
+                showAlert('alert', 'กำลังโหลดโมเดลใบหน้า กรุณารอสักครู่', 'info');
+                return;
+            }
+
+            // ตรวจสอบตำแหน่งก่อนเริ่มสแกน
+            const checkLocationEnabled = localStorage.getItem('checkLocation') === 'true';
+            if (checkLocationEnabled) {
+                showAlert('alert', 'กำลังตรวจสอบตำแหน่ง...', 'info');
+                
+                try {
+                    const locationResult = await checkLocation();
+                    if (!locationResult.withinRange) {
+                        showAlert('alert', 
+                            `คุณอยู่นอกเขตวิทยาลัย! \nระยะทางจากหน้าเสาธง: ${locationResult.distance.toFixed(1)} เมตร \nกรุณาเข้ามาในรัศมี 50 เมตรเพื่อเช็คชื่อ`, 
+                            'error'
+                        );
+                        return;
+                    } else {
+                        showAlert('alert', 'ตำแหน่งอยู่ในเขตที่กำหนด สามารถเช็คชื่อได้', 'success');
+                    }
+                } catch (error) {
+                    showAlert('alert', 
+                        `ไม่สามารถตรวจสอบตำแหน่งได้: ${error.message}\nกรุณาอนุญาตการเข้าถึงตำแหน่งหรือติดต่อผู้ดูแล`, 
+                        'error'
+                    );
+                    return;
+                }
+            }
+
+            // เริ่มต้นการสแกน
+            isScanning = true;
+            document.getElementById('start-scan-section').classList.add('hidden');
+            document.getElementById('scanning-section').classList.remove('hidden');
+            videoLoader.classList.remove('hidden');
+            videoWrapper.classList.add('hidden');
+            videoLoader.querySelector('p').textContent = 'กำลังเปิดกล้อง...';
+            
+            await startVideo();
+        }
+
+        // ... (โค้ดส่วนที่เหลือเหมือนเดิม)
+
+    </script>
+</body>
+</html>
